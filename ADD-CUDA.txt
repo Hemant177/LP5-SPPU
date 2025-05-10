@@ -1,0 +1,74 @@
+#include <iostream>
+#include <vector>
+//cuda_runtime.h: for using CUDA functions like cudaMalloc, cudaMemcpy
+#include <cuda_runtime.h> 
+
+
+
+// CUDA kernel for vector addition
+__global__ void vectorAdd(float *A, float *B, float *C, int N) {
+    Each GPU thread will get a unique index idx.
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < N) {
+        C[idx] = A[idx] + B[idx];
+    }
+}
+
+int main() {
+    int N = 10;
+    size_t size = N * sizeof(float);
+
+    // Host-side vectors
+    std::vector<float> vecA = {1,2,3,4,5,6,7,8,9,10};
+    std::vector<float> vecB = {1,2,3,4,5,6,7,8,9,10};
+    std::vector<float> vecC(N); // will hold the result
+
+    // Raw pointers for CUDA
+    float *d_A, *d_B, *d_C;
+    //cudaMalloc: Allocates memory on the GPU (called device memory).
+    cudaMalloc(&d_A, size);
+    cudaMalloc(&d_B, size);
+    cudaMalloc(&d_C, size);
+
+    // Copy data from std::vector to device
+    // Copy the values from CPU to GPU so the kernel can use them.
+    cudaMemcpy(d_A, vecA.data(), size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, vecB.data(), size, cudaMemcpyHostToDevice);
+
+    // Launch kernel
+    //cudaDeviceSynchronize() waits for all GPU threads to finish.
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+    vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    cudaDeviceSynchronize();
+
+    // Copy result back to host
+    cudaMemcpy(vecC.data(), d_C, size, cudaMemcpyDeviceToHost);
+
+    // Print results
+    std::cout << "Vector A: ";
+    for (int i = 0; i < N; i++) std::cout << vecA[i] << " ";
+    std::cout << "\nVector B: ";
+    for (int i = 0; i < N; i++) std::cout << vecB[i] << " ";
+    std::cout << "\nCalculations (A[i] + B[i]):\n";
+    for (int i = 0; i < N; i++) {
+        std::cout << "C[" << i << "] = " << vecA[i] << " + " << vecB[i] << " = " << vecC[i] << std::endl;
+    }
+
+    // Free device memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    return 0;
+}
+
+
+
+
+
+// vecA, vecB	Input arrays (on CPU)
+// cudaMalloc	Allocates memory on GPU
+// cudaMemcpy	Transfers data CPU ⇄ GPU
+// vectorAdd	GPU kernel to do addition
+// cudaFree	Releases GPU memory
